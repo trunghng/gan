@@ -1,1 +1,1 @@
-# gan-mnist
+# gan
