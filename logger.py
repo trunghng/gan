@@ -1,7 +1,15 @@
 import os.path as osp
 import os, atexit, json
+from pathlib import Path
 from datetime import datetime
+from collections import defaultdict
+from math import ceil, log10
+import numpy as np
+import torch
+from torchvision.utils import make_grid, save_image
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+from imageio import imread, mimsave
 
 
 class Logger:
@@ -19,6 +27,11 @@ class Logger:
         self.log_file = open(osp.join(self.log_dir, log_fname), 'w')
         atexit.register(self.log_file.close)
         self.first_row = True
+        self.record = defaultdict(list)
+
+
+    def set_saver(self, model):
+        self.model = model
 
 
     def save_config(self, config):
@@ -36,24 +49,49 @@ class Logger:
         if self.first_row:
             self.log_file.write("\t".join(data.keys()) + "\n")
         values = []
-        logstr = ''
+        logstr = []
         for key in data:
-            value = data.get(key, "")
-            valstr = "%8.4g" % value if hasattr(value, "__float__") else value
-            logstr += f'[{key} {valstr}]'
+            value = data.get(key)
+            valstr = "%7.3g" % value if hasattr(value, "__float__") else value
+            logstr.append(f'{key} {valstr}')
             values.append(value)
-        print(logstr)
+            self.record[key].append(value)
+        print(' | '.join(logstr))
         self.log_file.write("\t".join(map(str, values)) + "\n")
         self.log_file.flush()
         self.first_row = False
 
 
-    def plot(self, X, epoch, batch, n_cols=6, n_rows=6):
-        X_ = X[:n_cols * n_rows]
-        for i in range(n_cols * n_rows):
-            plt.subplot(n_cols, n_rows, i + 1)
-            plt.axis('off')
-            plt.imshow(X_[i].reshape(32, 32), cmap='gray')
-        fname = f'ep{epoch}_b{batch}.png'
-        plt.savefig(osp.join(self.imgs_dir, fname))
+    def generate_imgs(self, X, epoch, nrow=6):
+        n = ceil(log10(self.config['epochs']))
+        img = make_grid(X.reshape([X.shape[0], 1, 32, 32]), nrow=nrow)
+        save_image(img, osp.join(self.imgs_dir, f'ep_{str(epoch).zfill(n)}.png'))
 
+
+    def generate_gif(self):
+        images = list()
+        for file in sorted(Path(self.imgs_dir).iterdir()):
+            if not file.is_file():
+                continue
+            images.append(imread(file))
+        mimsave(osp.join(self.log_dir, 'samples.gif'), images, fps=5)
+
+
+    def plot(self):
+        ax = plt.figure().gca()
+        ax.plot(self.record['epoch'], self.record['d_loss'], label='Discriminator loss')
+        ax.plot(self.record['epoch'], self.record['g_loss'], label='Generator loss')
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss')
+        ax.legend(loc='upper left')
+        plt.savefig(osp.join(self.log_dir, 'loss.png'))
+
+
+    def save_model(self):
+        path = osp.join(self.log_dir, 'model.pt')
+        torch.save({
+            'd_model': self.model['d_model'].state_dict(),
+            'g_model': self.model['g_model'].state_dict()
+        }, path)
+        print(f'Model is saved successfully at {path}')

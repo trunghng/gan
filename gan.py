@@ -8,22 +8,20 @@ from logger import Logger
 
 class Generator(nn.Module):
 
-    def __init__(self, latent_dim):
+    def __init__(self, latent_dim: int):
         super().__init__()
         self.latent_dim = latent_dim
         self.network = nn.Sequential(
             nn.Linear(latent_dim, 256),
-            nn.LeakyReLU(0.2),
-            nn.BatchNorm1d(256, 0.8),
+            nn.ReLU(),
             nn.Linear(256, 512),
-            nn.LeakyReLU(0.2),
-            nn.BatchNorm1d(512, 0.8),
+            nn.ReLU(),
             nn.Linear(512, 32*32),
             nn.Tanh()
         )
 
 
-    def forward(self, z):
+    def forward(self, z: torch.Tensor):
         return self.network(z)
 
 
@@ -41,7 +39,7 @@ class Discriminator(nn.Module):
         )
 
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         return self.network(x)
 
 
@@ -49,9 +47,9 @@ class GAN:
 
 
     def __init__(self,
-                discriminator,
-                generator,
-                device,
+                discriminator: Discriminator,
+                generator: Generator,
+                device: str,
                 args):
         self.discriminator = discriminator
         self.generator = generator
@@ -61,7 +59,7 @@ class GAN:
         self.epochs = args.epochs
         self.steps = args.steps
         self.batch_size = args.batch_size
-        self.log_interval = args.log_interval
+        self.sample_size = args.sample_size
         if args.exp_name:
             exp_name = args.exp_name
             log_dir = os.path.join(os.getcwd(), 'results', exp_name, f'{exp_name}_s{args.seed}')
@@ -72,13 +70,20 @@ class GAN:
         config_dict = vars(args)
         config_dict['model'] = 'gan'
         self.logger.save_config(config_dict)
+        self.logger.set_saver({
+            'd_model': discriminator,
+            'g_model': generator
+        })
 
 
-    def sample_noise(self):
-        return torch.rand(self.batch_size, self.generator.latent_dim)
+    def sample_noise(self, sample_size: int):
+        return torch.randn(sample_size, self.generator.latent_dim)
 
 
     def train(self, dataloader):
+        # Generate a fixed noise for image sampling after training
+        noise = self.sample_noise(self.sample_size)
+
         for epoch in range(1, self.epochs + 1):
             for i, (imgs, _) in enumerate(dataloader):
                 if i == len(dataloader.dataset) // self.batch_size:
@@ -86,32 +91,42 @@ class GAN:
 
                 for _ in range(self.steps):
                     self.d_optim.zero_grad()
-                    Z = self.sample_noise().to(self.device)
+                    Z = self.sample_noise(self.batch_size).to(self.device)
                     X = imgs.reshape(self.batch_size, -1).to(self.device)
 
                     d_loss_real = nn.BCELoss()(self.discriminator(X).reshape(self.batch_size), 
-                        torch.ones(self.batch_size, device=self.device))
+                                                torch.ones(self.batch_size, device=self.device))
                     d_loss_fake = nn.BCELoss()(self.discriminator(self.generator(Z)).reshape(self.batch_size), 
-                        torch.zeros(self.batch_size, device=self.device))
+                                                torch.zeros(self.batch_size, device=self.device))
                     d_loss = d_loss_real + d_loss_fake
                     d_loss.backward()
                     self.d_optim.step()
 
                 self.g_optim.zero_grad()
-                Z = self.sample_noise().to(self.device)
+                Z = self.sample_noise(self.batch_size).to(self.device)
                 g_loss = nn.BCELoss()(self.discriminator(self.generator(Z)).reshape(self.batch_size), 
-                    torch.ones(self.batch_size, device=self.device))
+                                        torch.ones(self.batch_size, device=self.device))
                 g_loss.backward()
                 self.g_optim.step()
 
-                if (i + 1) % self.log_interval == 0:
-                    self.logger.log({
-                        'epoch': epoch,
-                        'batch': i + 1,
-                        'd_loss': d_loss.item(),
-                        'g_loss': g_loss.item(),
-                    })
-                    self.logger.plot(self.generator(Z).data.cpu().numpy(), epoch, i + 1)
+            self.logger.log({
+                'epoch': epoch,
+                'd_loss': d_loss.item(),
+                'g_loss': g_loss.item()
+            })
+
+            # Generate images and denormalize
+            samples = self.generator(noise).mul(0.5).add(0.5)
+            self.logger.generate_imgs(samples.data.cpu(), epoch)
+        self.logger.generate_gif()
+        self.logger.plot()
+        self.logger.save_model()
+
+
+    def load_model(self, model_path: str):
+        model = torch.load(model_path)
+        self.discriminator.load_state_dict(model['d_model'])
+        self.generator.load_state_dict(model['g_model'])
 
 
 if __name__ == '__main__':
@@ -136,8 +151,8 @@ if __name__ == '__main__':
                         help='Learning rate for optimizing the generator')
     parser.add_argument('--latent-dim', type=int, default=100,
                         help='Dimensionality of the latent space')
-    parser.add_argument('--log-interval', type=int, default=100,
-                        help='Logging frequency')
+    parser.add_argument('--sample-size', type=int, default=36,
+                        help='Number of images sampled after training')
     args = parser.parse_args()
 
     random.seed(args.seed)
