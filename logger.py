@@ -64,7 +64,7 @@ class Logger:
 
     def generate_imgs(self, X, epoch, nrow=6):
         n = ceil(log10(self.config['epochs']))
-        img = make_grid(X.reshape([X.shape[0], 1, 32, 32]), nrow=nrow)
+        img = make_grid(X.reshape([X.shape[0], *self.config['image_size']]), nrow=nrow)
         save_image(img, osp.join(self.imgs_dir, f'ep_{str(epoch).zfill(n)}.png'))
 
 

@@ -1,0 +1,19 @@
+{
+    "dataroot":	"data/cifar10",
+    "dataset":	"cifar-10",
+    "exp_name":	"cifar",
+    "seed":	0,
+    "epochs":	50,
+    "steps":	1,
+    "batch_size":	128,
+    "d_lr":	0.0002,
+    "g_lr":	0.0002,
+    "latent_dim":	100,
+    "sample_size":	36,
+    "image_size":	[
+        3,
+        32,
+        32
+    ],
+    "model":	"gan"
+}

@@ -1,5 +1,5 @@
 {
-    "dataroot":	"data",
+    "dataroot":	"data/mnist",
     "dataset":	"mnist",
     "exp_name":	"mnist",
     "seed":	0,
@@ -10,5 +10,10 @@
     "g_lr":	0.0002,
     "latent_dim":	100,
     "sample_size":	36,
+    "image_size":	[
+        1,
+        32,
+        32
+    ],
     "model":	"gan"
 }

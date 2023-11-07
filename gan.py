@@ -1,14 +1,16 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim import Adam
 import argparse, random, os
+from typing import List
 from dataloader import get_dataloader
 from logger import Logger
 
 
 class Generator(nn.Module):
 
-    def __init__(self, latent_dim: int):
+    def __init__(self, latent_dim: int, output_dim: List[int]):
         super().__init__()
         self.latent_dim = latent_dim
         self.network = nn.Sequential(
@@ -16,7 +18,7 @@ class Generator(nn.Module):
             nn.ReLU(),
             nn.Linear(256, 512),
             nn.ReLU(),
-            nn.Linear(512, 32*32),
+            nn.Linear(512, np.prod(output_dim)),
             nn.Tanh()
         )
 
@@ -27,10 +29,10 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
 
-    def __init__(self):
+    def __init__(self, input_dim: List[int]):
         super().__init__()
         self.network = nn.Sequential(
-            nn.Linear(32*32, 512),
+            nn.Linear(np.prod(input_dim), 512),
             nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2),
@@ -46,13 +48,9 @@ class Discriminator(nn.Module):
 class GAN:
 
 
-    def __init__(self,
-                discriminator: Discriminator,
-                generator: Generator,
-                device: str,
-                args):
-        self.discriminator = discriminator
-        self.generator = generator
+    def __init__(self, device, args):
+        self.discriminator = Discriminator(args.image_size).to(device)
+        self.generator = Generator(args.latent_dim, args.image_size).to(device)
         self.device = device
         self.d_optim = Adam(self.discriminator.parameters(), args.d_lr, betas=(0.5, 0.999))
         self.g_optim = Adam(self.generator.parameters(), args.g_lr, betas=(0.5, 0.999))
@@ -71,8 +69,8 @@ class GAN:
         config_dict['model'] = 'gan'
         self.logger.save_config(config_dict)
         self.logger.set_saver({
-            'd_model': discriminator,
-            'g_model': generator
+            'd_model': self.discriminator,
+            'g_model': self.generator
         })
 
 
@@ -152,15 +150,15 @@ if __name__ == '__main__':
     parser.add_argument('--latent-dim', type=int, default=100,
                         help='Dimensionality of the latent space')
     parser.add_argument('--sample-size', type=int, default=36,
-                        help='Number of images sampled after training')
+                        help='Number of images being sampled after training')
     args = parser.parse_args()
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
+
     dataloader = get_dataloader(args)
+    args.image_size = list(dataloader.dataset[0][0].shape)
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    discriminator = Discriminator().to(device)
-    generator = Generator(args.latent_dim).to(device)
-    gan = GAN(discriminator, generator, device, args)
+    gan = GAN(device, args)
     gan.train(dataloader)
