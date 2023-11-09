@@ -1,15 +1,15 @@
+import numpy as np
+import torch
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+from imageio import imread, mimsave
 import os.path as osp
 import os, atexit, json
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 from math import ceil, log10
-import numpy as np
-import torch
-from torchvision.utils import make_grid, save_image
-import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
-from imageio import imread, mimsave
+import utils
 
 
 class Logger:
@@ -64,8 +64,8 @@ class Logger:
 
     def generate_imgs(self, X, epoch, nrow=6):
         n = ceil(log10(self.config['epochs']))
-        img = make_grid(X.reshape([X.shape[0], *self.config['image_size']]), nrow=nrow)
-        save_image(img, osp.join(self.imgs_dir, f'ep_{str(epoch).zfill(n)}.png'))
+        utils.save_images(osp.join(self.imgs_dir, f'ep_{str(epoch).zfill(n)}.png'),
+                            X, self.config['image_size'], nrow)
 
 
     def generate_gif(self):
