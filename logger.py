@@ -8,7 +8,7 @@ import os, atexit, json
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
-from math import ceil, log10
+from math import floor, log10
 import utils
 
 
@@ -63,18 +63,18 @@ class Logger:
 
 
     def generate_imgs(self, X, epoch, nrow=6):
-        n = ceil(log10(self.config['epochs']))
+        n = floor(log10(self.config['epochs'])) + 1
         utils.save_images(osp.join(self.imgs_dir, f'ep_{str(epoch).zfill(n)}.png'),
-                            X, self.config['image_size'], nrow)
+                            X, self.config['image_dim'], nrow)
 
 
     def generate_gif(self):
-        images = list()
+        images = []
         for file in sorted(Path(self.imgs_dir).iterdir()):
             if not file.is_file():
                 continue
             images.append(imread(file))
-        mimsave(osp.join(self.log_dir, 'samples.gif'), images, fps=5)
+        mimsave(osp.join(self.log_dir, 'samples.gif'), images, fps=3)
 
 
     def plot(self):
@@ -84,7 +84,7 @@ class Logger:
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         ax.set_xlabel('Epoch')
         ax.set_ylabel('Loss')
-        ax.legend(loc='upper left')
+        ax.legend(loc='upper right')
         plt.savefig(osp.join(self.log_dir, 'loss.png'))
 
 

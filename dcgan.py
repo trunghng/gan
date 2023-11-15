@@ -9,20 +9,33 @@ from typing import List
 from types import SimpleNamespace
 from dataloader import get_dataloader
 from logger import Logger
+from tqdm import tqdm
 import utils
 
 
 class Generator(nn.Module):
 
-    def __init__(self, latent_dim: int, output_dim: List[int]):
+    def __init__(self, latent_dim: int, channels: int):
         super().__init__()
         self.latent_dim = latent_dim
         self.network = nn.Sequential(
-            nn.Linear(latent_dim, 256),
+            # Input (100x1x1) -> Output (512x4x4)
+            nn.ConvTranspose2d(in_channels=latent_dim, out_channels=512, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm2d(512),
             nn.ReLU(),
-            nn.Linear(256, 512),
+
+            # Input (512x4x4) -> Output (256x8x8)
+            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
-            nn.Linear(512, np.prod(output_dim)),
+
+            # Input (256x8x8) -> Output (128x16x16)
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+
+            # Input (128x16x16) -> Output (channels x 32x32)
+            nn.ConvTranspose2d(in_channels=128, out_channels=channels, kernel_size=4, stride=2, padding=1),
             nn.Tanh()
         )
 
@@ -33,14 +46,25 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
 
-    def __init__(self, input_dim: List[int]):
+    def __init__(self, channels: int):
         super().__init__()
         self.network = nn.Sequential(
-            nn.Linear(np.prod(input_dim), 512),
+            # Input (channels x 32x32) -> Output (256x16x16)
+            nn.Conv2d(in_channels=channels, out_channels=256, kernel_size=4, stride=2, padding=1),
             nn.LeakyReLU(0.2),
-            nn.Linear(512, 256),
+
+            # Input (256x16x16) -> Output (512x8x8)
+            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(512),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, 1),
+
+            # Input (512x8x8) -> Output (1024x4x4)
+            nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(1024),
+            nn.LeakyReLU(0.2),
+
+            # Input (1024x4x4) -> Output (1x1x1)
+            nn.Conv2d(in_channels=1024, out_channels=1, kernel_size=4, stride=1, padding=0),
             nn.Sigmoid()
         )
 
@@ -49,13 +73,13 @@ class Discriminator(nn.Module):
         return self.network(x)
 
 
-class GAN:
+class DCGAN:
 
 
     def __init__(self, args):
         self.device = torch.device(args.device)
-        self.discriminator = Discriminator(args.image_dim).to(self.device)
-        self.generator = Generator(args.latent_dim, args.image_dim).to(self.device)
+        self.discriminator = Discriminator(args.image_dim[0]).to(self.device)
+        self.generator = Generator(args.latent_dim, args.image_dim[0]).to(self.device)
         self.d_optim = Adam(self.discriminator.parameters(), args.d_lr, betas=(0.5, 0.999))
         self.g_optim = Adam(self.generator.parameters(), args.g_lr, betas=(0.5, 0.999))
         self.epochs = args.epochs
@@ -71,7 +95,7 @@ class GAN:
             log_dir = None
         self.logger = Logger(log_dir=log_dir, exp_name=exp_name)
         config_dict = vars(args)
-        config_dict['model'] = 'gan'
+        config_dict['model'] = 'dcgan'
         self.logger.save_config(config_dict)
         self.logger.set_saver({
             'd_model': self.discriminator,
@@ -80,7 +104,7 @@ class GAN:
 
 
     def sample_noise(self, sample_size: int):
-        return torch.randn(sample_size, self.generator.latent_dim)
+        return torch.randn(sample_size, self.generator.latent_dim, 1, 1)
 
 
     def train(self, dataloader):
@@ -89,14 +113,14 @@ class GAN:
         start_time = time.time()
 
         for epoch in range(1, self.epochs + 1):
-            for i, (imgs, _) in enumerate(dataloader):
+            for i, (imgs, _) in enumerate(tqdm(dataloader)):
                 if i == len(dataloader.dataset) // self.batch_size:
                     break
 
                 for _ in range(self.steps):
                     self.d_optim.zero_grad()
                     Z = self.sample_noise(self.batch_size).to(self.device)
-                    X = imgs.reshape(self.batch_size, -1).to(self.device)
+                    X = imgs.to(self.device)
 
                     d_loss_real = nn.BCELoss()(self.discriminator(X).reshape(self.batch_size), 
                                                 torch.ones(self.batch_size, device=self.device))
@@ -159,7 +183,7 @@ class GAN:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Generative Adversarial Network (GAN)')
+    parser = argparse.ArgumentParser(description='Deep Convolutional GAN (DCGAN)')
     eval_args = parser.add_argument_group('Evaluation mode arguments')
     eval_args.add_argument('--eval', action=argparse.BooleanOptionalAction, required=True,
                         help='Use the tag --eval to enable evaluation mode, --no-eval to enable training mode')
@@ -170,7 +194,7 @@ if __name__ == '__main__':
                         help='Path to the dataset directory')
     training_args.add_argument('--dataset', type=str, choices=['mnist', 'cifar-10'], default='mnist',
                         help='Name of the dataset')
-    training_args.add_argument('--exp-name', type=str, default='gan',
+    training_args.add_argument('--exp-name', type=str, default='dcgan',
                         help='Experiment name')
     training_args.add_argument('--seed', type=int, default=0,
                         help='Seed for RNG')
@@ -193,7 +217,7 @@ if __name__ == '__main__':
     if args.eval:
         with open(osp.join(args.log_dir, 'config.json')) as f:
             config = json.load(f, object_hook=lambda d: SimpleNamespace(**d))
-            model = GAN(config)
+            model = DCGAN(config)
             model.evaluate(osp.join(args.log_dir, 'model.pt'))
             model.generate_latent_walk(args.log_dir)
     else:
@@ -204,5 +228,5 @@ if __name__ == '__main__':
         args.image_dim = list(dataloader.dataset[0][0].shape)
         args.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-        model = GAN(args)
+        model = DCGAN(args)
         model.train(dataloader)
