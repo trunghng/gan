@@ -18,14 +18,9 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-Each model can be run directly through ```<model_file>``` (i.e. ```gan.py```, ```dcgan.py``` or ```wgan.py```)
-```
-python <model_file> <arguments>
-```
-where ```<arguments>``` are arguments being passed to run the model. For example, ```gan.py``` consists of
 ```bash
-usage: gan.py [-h] --eval | --no-eval [--log-dir LOG_DIR] --dataroot DATAROOT
-              [--dataset {mnist,cifar-10}] [--exp-name EXP_NAME] [--seed SEED]
+usage: run.py [-h] --model {gan,dcgan,wgan} --eval | --no-eval [--log-dir LOG_DIR] --dataroot
+              DATAROOT [--dataset {mnist,cifar-10}] [--exp-name EXP_NAME] [--seed SEED]
               [--epochs EPOCHS] [--steps STEPS] [--batch-size BATCH_SIZE] [--d-lr D_LR]
               [--g-lr G_LR] [--latent-dim LATENT_DIM] [--sample-size SAMPLE_SIZE]
 
@@ -33,10 +28,14 @@ Generative Adversarial Network (GAN)
 
 optional arguments:
   -h, --help            show this help message and exit
+  --model {gan,dcgan,wgan}
+                        Select the model to run, where:
+                        - gan: GAN
+                        - dcgan: Deep Convolutional GAN
+                        - wgan: Wasserstein GAN
 
 Evaluation mode arguments:
-  --eval, --no-eval     Use the tag --eval to enable evaluation mode, --no-eval to enable
-                        training mode
+  --eval, --no-eval     Use the tag --eval to enable evaluation mode, --no-eval to enable training mode
   --log-dir LOG_DIR     Path to the log directory, which stores model file, config file, etc
 
 Training mode arguments:
@@ -60,19 +59,19 @@ Training mode arguments:
 ### Training
 For model training, for instance, in order to train GAN with default settings, we simply run
 ```bash
-python gan.py --no-eval --dataroot data/mnist
+python run.py --model gan --no-eval --dataroot data/mnist
 ```
 which is equivalent to
-```
-python gan.py --no-eval --dataroot data/mnist --dataset mnist \
---exp-name gan --seed 0 --epochs 50 --steps 1 --batch-size 64 \
+```bash
+python run.py --model gan --no-eval --dataroot data/mnist --dataset mnist \
+--exp-name gan-mnist --seed 0 --epochs 50 --steps 1 --batch-size 64 \
 --d-lr 0.0002 --g-lr 0.0002 --latent-dim 100 --sample-size 36
 ```
 
 ### Evaluation
 For model evaluation, for example, we evaluate GAN with log files saved at ```results/gan-mnist``` as
 ```bash
-python gan.py --eval --log-dir results/gan-mnist
+python run.py --model gan --eval --log-dir results/gan-mnist
 ```
 
 ## References

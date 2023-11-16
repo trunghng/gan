@@ -17,15 +17,17 @@ class Logger:
     def __init__(self, 
                 log_dir=None,
                 log_fname='progress.txt',
-                exp_name=None):
+                exp_name=None,
+                is_eval=False):
         self.exp_name = exp_name
         self.log_dir = log_dir if log_dir else f'/tmp/experiments/{str(datetime.now())}'
         self.imgs_dir = osp.join(self.log_dir, 'imgs')
         if not osp.exists(self.log_dir):
             os.makedirs(self.log_dir)
             os.makedirs(self.imgs_dir)
-        self.log_file = open(osp.join(self.log_dir, log_fname), 'w')
-        atexit.register(self.log_file.close)
+        if not is_eval:
+            self.log_file = open(osp.join(self.log_dir, log_fname), 'w')
+            atexit.register(self.log_file.close)
         self.first_row = True
         self.record = defaultdict(list)
 
